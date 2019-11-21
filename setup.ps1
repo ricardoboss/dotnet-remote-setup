@@ -3,12 +3,17 @@
 
 # Requirements:
 # - Windows 10 (1809+)
-# - PowerShell 5.1+
+# - OpenSSH Client
+# - PowerShell 6+
 
 param(
     [switch] $SkipCheck,
-    [string] $Hostname=$null,
-    [string] $Username=$null
+
+    [string] $Hostname = $null,
+    [string] $Username = $null,
+
+    [ValidateNotNullOrEmpty()]
+    [string] $PrivateKey = ".\keys\remote_ed25519"
 )
 
 $openSshClientName = "OpenSSH.Client~~~~0.0.1.0"
@@ -45,7 +50,8 @@ function Get-OpenSshClientInstalled {
         Install-OpenSSHClient
 
         return $true
-    } else {
+    }
+    else {
         return $false
     }
 }
@@ -64,18 +70,28 @@ function Get-RequirementsMet {
 
     Write-Host "> Checking if all requirements are met." -ForegroundColor DarkCyan
 
-    if (Get-WindowsReleaseId -ge 1809) 
-    {
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        Write-Host "- PowerShell version ok (6+)"
+    }
+    else {
+        Write-Host "! Invalid PowerShell version: ${$PSVersionTable.PSVersion.Major}" -ForegroundColor DarkYellow
+
+        return $false
+    }
+
+    if (Get-WindowsReleaseId -ge 1809) {
         Write-Host "- Windows version ok (1809+)"
-    } else {
+    }
+    else {
         Write-Host "! Invalid Windows version: $(Get-WindowsReleaseId)" -ForegroundColor DarkYellow
 
         return $false
     }
 
-    if (Get-OpenSshClientInstalled -eq $true) {
+    if (Get-OpenSshClientInstalled) {
         Write-Host "- OpenSSH.Client installed"
-    } else {
+    }
+    else {
         Write-Host "! OpenSSH.Client not installed" -ForegroundColor DarkYellow
 
         return $false
@@ -84,24 +100,19 @@ function Get-RequirementsMet {
     return $true
 }
 
-function GenerateSshKeypair {
-
-}
-
 function Setup {
-    Write-Host "Raspberry Pi <-> .NET Core toolchain"
-    Write-Host "===================================="
+    Write-Host "Remote <-> .NET Core Debugging toolchain"
+    Write-Host "========================================"
 
-    # First check if all requirements are met
+    # first, check if all requirements are met
     if ((Get-RequirementsMet) -eq $false) {
         Write-Error "Not all requirements are met. Cannot install toolchain."
 
         return
     }
 
-    # In case any requirements where installed and a restart is needed, do it here
-    if ($restartRequired) 
-    {
+    # in case any requirements where installed and a restart is needed, do it here
+    if ($restartRequired) {
         Write-Host "! A restart is required before proceeding." -ForegroundColor DarkYellow
 
         Restart-Computer -Confirm
@@ -117,7 +128,8 @@ function Setup {
         if ($prompt -ne "") {
             $hostname = $prompt
         }
-    } else {
+    }
+    else {
         Write-Host "- Using $Hostname as hostname."
 
         $hostname = $Hostname
@@ -129,35 +141,44 @@ function Setup {
         if ($prompt -ne "") {
             $username = $prompt
         }
-    } else {
+    }
+    else {
         Write-Host "- Using $Username as username."
 
         $username = $Username
     }
 
-    # TODO: check if keys already exist and use them
-
     # generate ssh keypair
     Write-Host "- Generating keypair..."
-    mkdir keys > $null
-    ssh-keygen -q -t ed25519 -f "keys/remote_ed25519"
+    mkdir @(Split-Path -Path $PrivateKey) -Force > $null
+    ssh-keygen -q -t ed25519 -f $PrivateKey -N '""'
+    "`r`n"
 
     # push public key to authorized_keys
     Write-Host "- Adding public key to authorized_keys on remote host."
     Write-Host "! You will be prompted by ssh to enter your password for the remote machine." -ForegroundColor DarkYellow
-    Get-Content "keys/remote_ed25519.pub" | ssh -o StrictHostKeyChecking=no $username@$hostname "cat >> ~/.ssh/authorized_keys"
+    Get-Content "$PrivateKey.pub" `
+        | ssh -o StrictHostKeyChecking=no $username@$hostname "cat >> ~/.ssh/authorized_keys"
+    "`r`n"
 
-    # install dotnet
-    Write-Host "> Installing .NET core runtime on remote machine" -ForegroundColor DarkCyan
-    ssh $username@$hostname -o StrictHostKeyChecking=no -i "keys/remote_ed25519" "curl -sSL https://dotnetwebsite.azurewebsites.net/download/dotnet-core/scripts/v1/dotnet-install.sh | bash /dev/stdin --channel Current --runtime dotnet"
+    # upload setup script
+    Write-Host "- Uploading and executing setup script on remote."
+    scp -o StrictHostKeyChecking=no -i $PrivateKey .\setup.sh $username@$hostname`:~
+    "`r`n"
+    ssh -o StrictHostKeyChecking=no -i $PrivateKey $username@$hostname "bash ~/setup.sh"
+    "`r`n"
 
-    # install vsdbg
-    Write-Host "> Installing vsdbg on remote machine" -ForegroundColor DarkCyan
-    ssh $username@$hostname -o StrictHostKeyChecking=no -i "keys/remote_ed25519" "curl -sSL https://aka.ms/getvsdbgsh | bash /dev/stdin -u -r linux-arm -v latest -l ~/vsdbg"
+    # # install dotnet
+    # Write-Host "> Installing .NET core runtime on remote machine" -ForegroundColor DarkCyan
+    # ssh -o StrictHostKeyChecking=no -i "keys/remote_ed25519" $username@$hostname "curl -sSL https://dotnetwebsite.azurewebsites.net/download/dotnet-core/scripts/v1/dotnet-install.sh | bash /dev/stdin --channel Current --runtime dotnet"
+
+    # # install vsdbg
+    # Write-Host "> Installing vsdbg on remote machine" -ForegroundColor DarkCyan
+    # ssh -o StrictHostKeyChecking=no -i "keys/remote_ed25519" $username@$hostname "curl -sSL https://aka.ms/getvsdbgsh | bash /dev/stdin -u -r linux-arm -v latest -l ~/vsdbg"
 
     # create template project
     # modify project file to upload compiled files to raspberry after build:
-<# 
+    <# 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <Exec Command="'C:\Windows\System32\OpenSSH\scp.exe' '$(OutDir)' <username>@<hostname>:~/$(ProjectName)/" />
   </Target>
