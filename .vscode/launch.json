@@ -1,0 +1,36 @@
+{
+    // Verwendet IntelliSense zum Ermitteln möglicher Attribute.
+    // Zeigen Sie auf vorhandene Attribute, um die zugehörigen Beschreibungen anzuzeigen.
+    // Weitere Informationen finden Sie unter https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "PowerShell: Launch Setup Script",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}/setup.ps1",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "PowerShell: Launch Setup Script without Requirement check",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}/setup.ps1",
+            "args": [
+                "-SkipCheck"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "PowerShell: Launch Setup Script with predefined remote values",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}/setup.ps1",
+            "args": [
+                "-Hostname alphubel",
+                "-Username rico"
+            ],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
