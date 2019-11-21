@@ -152,37 +152,25 @@ function Setup {
     Write-Host "- Generating keypair..."
     mkdir @(Split-Path -Path $PrivateKey) -Force > $null
     ssh-keygen -q -t ed25519 -f $PrivateKey -N '""'
-    "`r`n"
 
     # push public key to authorized_keys
     Write-Host "- Adding public key to authorized_keys on remote host."
     Write-Host "! You will be prompted by ssh to enter your password for the remote machine." -ForegroundColor DarkYellow
     Get-Content "$PrivateKey.pub" `
         | ssh -o StrictHostKeyChecking=no $username@$hostname "cat >> ~/.ssh/authorized_keys"
-    "`r`n"
 
     # upload setup script
     Write-Host "- Uploading and executing setup script on remote."
     scp -o StrictHostKeyChecking=no -i $PrivateKey .\setup.sh $username@$hostname`:~
-    "`r`n"
     ssh -o StrictHostKeyChecking=no -i $PrivateKey $username@$hostname "bash ~/setup.sh"
-    "`r`n"
 
-    # # install dotnet
-    # Write-Host "> Installing .NET core runtime on remote machine" -ForegroundColor DarkCyan
-    # ssh -o StrictHostKeyChecking=no -i "keys/remote_ed25519" $username@$hostname "curl -sSL https://dotnetwebsite.azurewebsites.net/download/dotnet-core/scripts/v1/dotnet-install.sh | bash /dev/stdin --channel Current --runtime dotnet"
-
-    # # install vsdbg
-    # Write-Host "> Installing vsdbg on remote machine" -ForegroundColor DarkCyan
-    # ssh -o StrictHostKeyChecking=no -i "keys/remote_ed25519" $username@$hostname "curl -sSL https://aka.ms/getvsdbgsh | bash /dev/stdin -u -r linux-arm -v latest -l ~/vsdbg"
-
-    # create template project
+    # TODO: create template project
     # modify project file to upload compiled files to raspberry after build:
     <# 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="'C:\Windows\System32\OpenSSH\scp.exe' '$(OutDir)' <username>@<hostname>:~/$(ProjectName)/" />
-  </Target>
-#>
+        <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+            <Exec Command="'C:\Windows\System32\OpenSSH\scp.exe' '$(OutDir)' <username>@<hostname>:~/$(ProjectName)/" />
+        </Target>
+    #>
     # modify project file to start debugging on raspberry after upload
 
     Write-Host "> Setup complete." -ForegroundColor Green
