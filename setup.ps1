@@ -74,7 +74,7 @@ function Get-RequirementsMet {
         Write-Host "- PowerShell version ok (6+)"
     }
     else {
-        Write-Host "! Invalid PowerShell version: ${$PSVersionTable.PSVersion.Major}" -ForegroundColor DarkYellow
+        Write-Host "! Invalid PowerShell version: $($PSVersionTable.PSVersion.Major). Required: 6+" -ForegroundColor DarkYellow
 
         return $false
     }
@@ -106,7 +106,7 @@ function Setup {
 
     # first, check if all requirements are met
     if ((Get-RequirementsMet) -eq $false) {
-        Write-Error "Not all requirements are met. Cannot install toolchain."
+        Write-Error "Not all requirements are met. Cannot install toolchain." -Category InvalidResult
 
         return
     }
@@ -120,32 +120,32 @@ function Setup {
         return
     }
 
-    Write-Host "> Setting up remote machine" -ForegroundColor DarkCyan
+    Write-Host "> Setting up remote login" -ForegroundColor DarkCyan
 
     if ("" -eq $Hostname) {
-        $hostname = "raspberry.local"
-        $prompt = Read-Host "< Remote hostname [$hostname]"
+        $ssh_hostname = "raspberry.local"
+        $prompt = Read-Host "< Remote hostname [$ssh_hostname]"
         if ($prompt -ne "") {
-            $hostname = $prompt
+            $ssh_hostname = $prompt
         }
     }
     else {
         Write-Host "- Using $Hostname as hostname."
 
-        $hostname = $Hostname
+        $ssh_hostname = $Hostname
     }
 
     if ("" -eq $Username) {
-        $username = "pi"
-        $prompt = Read-Host "< Remote username [$username]"
+        $ssh_username = "pi"
+        $prompt = Read-Host "< Remote username [$ssh_username]"
         if ($prompt -ne "") {
-            $username = $prompt
+            $ssh_username = $prompt
         }
     }
     else {
         Write-Host "- Using $Username as username."
 
-        $username = $Username
+        $ssh_username = $Username
     }
 
     # generate ssh keypair
@@ -155,14 +155,17 @@ function Setup {
 
     # push public key to authorized_keys
     Write-Host "- Adding public key to authorized_keys on remote host."
-    Write-Host "! You will be prompted by ssh to enter your password for the remote machine." -ForegroundColor DarkYellow
+    Write-Host "! You may be prompted by ssh to enter your password for the remote machine." -ForegroundColor DarkYellow
     Get-Content "$PrivateKey.pub" `
-        | ssh -o StrictHostKeyChecking=no $username@$hostname "cat >> ~/.ssh/authorized_keys"
+        | ssh -o StrictHostKeyChecking=no $ssh_username@$ssh_hostname "cat >> ~/.ssh/authorized_keys"
+
+    Write-Host "> Setting up remote machine" -ForegroundColor DarkCyan
 
     # upload setup script
-    Write-Host "- Uploading and executing setup script on remote."
-    scp -o StrictHostKeyChecking=no -i $PrivateKey .\setup.sh $username@$hostname`:~
-    ssh -o StrictHostKeyChecking=no -i $PrivateKey $username@$hostname "bash ~/setup.sh"
+    Write-Host "- Uploading setup script on remote."
+    scp -o StrictHostKeyChecking=no -i $PrivateKey .\setup.sh $ssh_username@$ssh_hostname`:~
+    Write-Host "- Executing setup on remote."
+    ssh -o StrictHostKeyChecking=no -i $PrivateKey $ssh_username@$ssh_hostname "bash ~/setup.sh"
 
     # TODO: create template project
     # modify project file to upload compiled files to raspberry after build:
